@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>WeatherAI Dashboard</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <link rel="stylesheet" href="dashboard.css">
+  
+  <style>
+    /* Inline styles for the new weather elements to ensure they look good 
+       without seeing your external dashboard.css */
+    .weather-dashboard-card {
+      background: rgba(255, 255, 255, 0.8);
+      backdrop-filter: blur(10px);
+      border-radius: 20px;
+      padding: 2rem;
+      margin-top: 20px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.05);
+      text-align: center;
+      display: none; /* Hidden by default */
+    }
+    .light-mode .weather-dashboard-card { background: rgba(255,255,255,0.9); }
+    body:not(.light-mode) .weather-dashboard-card { background: rgba(30, 30, 30, 0.8); color: white; }
+
+    .main-temp { font-size: 4rem; font-weight: 700; margin: 0; }
+    .condition-text { font-size: 1.5rem; color: #666; margin-bottom: 1.5rem; text-transform: capitalize; }
+    body:not(.light-mode) .condition-text { color: #aaa; }
+
+    .grid-stats {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 15px;
+      margin-top: 20px;
+      border-top: 1px solid rgba(0,0,0,0.1);
+      padding-top: 20px;
+    }
+    .stat-item { display: flex; flex-direction: column; align-items: center; }
+    .stat-label { font-size: 0.85rem; opacity: 0.7; }
+    .stat-value { font-weight: 600; font-size: 1.1rem; }
+
+    /* Loading Spinner */
+    .loader-container { text-align: center; padding: 3rem; display: none; }
+    .spinner { border: 4px solid rgba(0,0,0,0.1); border-left-color: #007bff; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; margin: 0 auto 1rem; }
+    body:not(.light-mode) .spinner { border: 4px solid rgba(255,255,255,0.1); border-left-color: #4facfe; }
+    @keyframes spin { 100% { transform: rotate(360deg); } }
+
+    /* Helper to hide/show sections */
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body class="light-mode">
+
+  <!-- Header -->
+  <header class="header">
+    <a href="index.html" class="back-btn" title="Back to Home">
+      <i class="fa-solid fa-arrow-left"></i>
+    </a>
+    <div class="logo">
+      <i class="fa-solid fa-cloud-sun"></i>
+      <span>WeatherAI</span>
+    </div>
+    <div class="header-icons">
+      <i class="fa-solid fa-rotate refresh-icon" title="Refresh"></i>
+      <div class="profile">P</div>
+      <i class="fa-solid fa-arrow-right-from-bracket" title="Sign Out"></i>
+    </div>
+  </header>
+
+  <!-- Main Content -->
+  <main class="container">
+    <section class="greeting">
+      <h1 id="greeting-text">Good afternoon, priyadharshini</h1>
+      <p id="date-display">Here's your weather update for today</p>
+    </section>
+
+    <!-- 1. LOADING STATE -->
+    <div id="loading-section" class="loader-container">
+      <div class="spinner"></div>
+      <p>Locating you & fetching weather...</p>
+    </div>
+
+    <!-- 2. WEATHER DATA CARD (Success) -->
+    <section id="weather-section" class="weather-dashboard-card">
+      <div class="location-badge">
+        <i class="fa-solid fa-location-arrow"></i> <span id="loc-name">Current Location</span>
+      </div>
+      
+      <h1 class="main-temp" id="temp-val">--°</h1>
+      <p class="condition-text" id="condition-val">--</p>
+
+      <div class="grid-stats">
+        <div class="stat-item">
+          <span class="stat-value" id="humidity-val">--%</span>
+          <span class="stat-label">Humidity</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-value" id="wind-val">-- km/h</span>
+          <span class="stat-label">Wind</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-value" id="uv-val">--</span>
+          <span class="stat-label">UV Index</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- 3. ERROR CARD (Fallback) -->
+    <section id="error-section" class="card hidden">
+      <div class="location-icon">
+        <i class="fa-solid fa-location-crosshairs" style="font-size: 40px; color: #ff4757; margin-bottom: 15px;"></i>
+      </div>
+      <h2>Location Required</h2>
+      <p id="error-msg">We need your location to show local weather.</p>
+
+      <button class="location-btn" onclick="requestLocation()">
+        <i class="fa-solid fa-location-dot"></i>
+        Enable Location Access
+      </button>
+    </section>
+
+  </main>
+
+  <!-- Bright Mode Button -->
+  <button class="bright-btn" title="Bright Mode">
+    <i class="fa-solid fa-lightbulb"></i>
+  </button>
+
+  <script>
+    // ==========================================
+    // 1. CONFIGURATION
+    // ==========================================
+    // 🔴 PASTE YOUR API KEY HERE 🔴
+    const API_KEY = 'uTSKdjg78n5E0ni9oIEK4wqVKQnItfcE'; 
+
+    // UI Elements
+    const loadingSection = document.getElementById('loading-section');
+    const weatherSection = document.getElementById('weather-section');
+    const errorSection = document.getElementById('error-section');
+    const errorMsg = document.getElementById('error-msg');
+
+    // Weather Codes Map
+    const weatherCodes = {
+      0: "Unknown", 1000: "Clear, Sunny", 1100: "Mostly Clear", 1101: "Partly Cloudy",
+      1102: "Mostly Cloudy", 1001: "Cloudy", 2000: "Fog", 2100: "Light Fog",
+      4000: "Drizzle", 4001: "Rain", 4200: "Light Rain", 4201: "Heavy Rain",
+      5000: "Snow", 5001: "Flurries", 5100: "Light Snow", 5101: "Heavy Snow",
+      6000: "Freezing Drizzle", 6001: "Freezing Rain", 6200: "Light Freezing Rain",
+      6201: "Heavy Freezing Rain", 7000: "Ice Pellets", 7101: "Heavy Ice Pellets",
+      8000: "Thunderstorm"
+    };
+
+    // ==========================================
+    // 2. LOGIC
+    // ==========================================
+
+    // Initialize on Page Load
+    window.addEventListener('load', () => {
+        updateGreeting();
+        requestLocation();
+    });
+
+    // 1. Request Location
+    function requestLocation() {
+        showLoading();
+
+        if (!navigator.geolocation) {
+            showError("Geolocation is not supported by this browser.");
+            return;
+        }
+
+        navigator.geolocation.getCurrentPosition(
+            (position) => {
+                const lat = position.coords.latitude;
+                const long = position.coords.longitude;
+                fetchWeather(lat, long);
+            },
+            (error) => {
+                let msg = "Location request failed.";
+                if(error.code === 1) msg = "You denied location access. Please allow it to see weather.";
+                if(error.code === 2) msg = "Location unavailable.";
+                if(error.code === 3) msg = "Location request timed out.";
+                showError(msg);
+            },
+            { timeout: 10000 }
+        );
+    }
+
+    // 2. Fetch Weather from API
+    function fetchWeather(lat, long) {
+        if (API_KEY === 'YOUR_TOMORROW_IO_API_KEY_HERE') {
+            showError("API Key is missing in the code.");
+            return;
+        }
+
+        const url = `https://api.tomorrow.io/v4/weather/realtime?location=${lat},${long}&apikey=${API_KEY}`;
+
+        fetch(url)
+            .then(response => {
+                if(!response.ok) throw new Error("API Limit reached or Invalid Key");
+                return response.json();
+            })
+            .then(data => {
+                updateUI(data.data.values);
+            })
+            .catch(err => {
+                console.error(err);
+                showError("Failed to fetch weather data. Check API Key.");
+            });
+    }
+
+    // 3. Update UI
+    function updateUI(values) {
+        // Hide loader/error, show weather
+        loadingSection.style.display = 'none';
+        errorSection.classList.add('hidden');
+        weatherSection.style.display = 'block';
+
+        // Update Text
+        document.getElementById('temp-val').innerText = Math.round(values.temperature) + "°";
+        document.getElementById('condition-val').innerText = weatherCodes[values.weatherCode] || "Unknown";
+        document.getElementById('humidity-val').innerText = values.humidity + "%";
+        document.getElementById('wind-val').innerText = values.windSpeed + " km/h";
+        document.getElementById('uv-val').innerText = values.uvIndex;
+    }
+
+    // Helper: Show Loading
+    function showLoading() {
+        loadingSection.style.display = 'block';
+        weatherSection.style.display = 'none';
+        errorSection.classList.add('hidden');
+    }
+
+    // Helper: Show Error
+    function showError(msg) {
+        loadingSection.style.display = 'none';
+        weatherSection.style.display = 'none';
+        errorSection.classList.remove('hidden');
+        errorMsg.innerText = msg;
+    }
+
+    // Helper: Dynamic Greeting
+    function updateGreeting() {
+        const hour = new Date().getHours();
+        const greetingEl = document.getElementById('greeting-text');
+        const user = "priyadharshini"; // You can make this dynamic later
+        
+        let text = "Good evening";
+        if (hour < 12) text = "Good morning";
+        else if (hour < 18) text = "Good afternoon";
+        
+        greetingEl.innerText = `${text}, ${user}`;
+
+        // Date
+        const options = { weekday: 'long', month: 'long', day: 'numeric' };
+        document.getElementById('date-display').innerText = new Date().toLocaleDateString('en-US', options);
+    }
+
+    // ==========================================
+    // 3. THEME & UTILS (Existing Code)
+    // ==========================================
+    (function() {
+      const refresh = document.querySelector('.refresh-icon');
+      if (refresh) {
+        refresh.addEventListener('click', function () {
+          this.classList.add('spin');
+          requestLocation(); // Retry logic instead of full reload
+          setTimeout(() => this.classList.remove('spin'), 1000);
+        });
+      }
+
+      const brightBtn = document.querySelector('.bright-btn');
+      if (brightBtn) {
+        const brightIcon = brightBtn.querySelector('i');
+        function applyTheme(theme) {
+          if (theme === 'light') {
+            document.body.classList.add('light-mode');
+            brightBtn.classList.add('active');
+            brightIcon.className = 'fa-solid fa-moon';
+          } else {
+            document.body.classList.remove('light-mode');
+            brightBtn.classList.remove('active');
+            brightIcon.className = 'fa-solid fa-lightbulb';
+          }
+          try { localStorage.setItem('theme', theme); } catch (e) {}
+        }
+        const saved = localStorage.getItem('theme');
+        if (saved) applyTheme(saved);
+        
+        brightBtn.addEventListener('click', () => {
+          applyTheme(document.body.classList.contains('light-mode') ? 'dark' : 'light');
+        });
+      }
+    })();
+  </script>
+</body>
+</html>

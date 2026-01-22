@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>WeatherAI - Intelligent Forecast</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <link rel="stylesheet" href="style.css">
+  
+  <style>
+</style>
+</head>
+
+<body class="home light-mode">
+
+  <!-- Navbar -->
+  <div class="navbar">
+    <div class="logo">WeatherAI</div>
+    <div class="nav-actions">
+      <a href="settings.html" class="settings-icon">⚙</a>
+      <a href="settings.html" class="settings-text">Settings</a>
+      <button class="sign-in">Sign In</button>
+    </div>
+  </div>
+
+  <!-- Hero Section -->
+  <section class="hero">
+    <div class="badge">⚡ AI-Powered Weather Intelligence</div>
+    <h1>Weather that <span class="gradient-text">understands you</span></h1>
+    <p>Experience smarter weather updates with AI-curated activity and food recommendations.</p>
+    <a href="dashboard.html" class="get-started">Get Started →</a>
+  </section>
+
+  <!-- Feature Cards -->
+  <section class="features">
+    <div class="card location-card">
+      <h3>📍 Location Aware</h3>
+      <p>Automatic detection of your location for precise local weather data.</p>
+    </div>
+    <div class="card ai-card">
+      <h3>✨ AI Recommendations</h3>
+      <p>Smart suggestions for activities and food based on current weather.</p>
+    </div>
+    <div class="card realtime-card">
+      <h3>⏱ Real-time Updates</h3>
+      <p>Live weather data from Tomorrow.io with beautiful visualizations.</p>
+    </div>
+  </section>
+
+  <!-- Weather Display -->
+  <div class="weather-box">
+    <h1 id="temp-display">--°</h1>
+    <p id="condition-display">Initializing...</p>
+    <div class="weather-info">
+      <span id="humidity-display">Humidity: --%</span>
+      <span id="wind-display">Wind: -- km/h</span>
+      <span id="uv-display">UV: --</span>
+    </div>
+  </div>
+
+  <footer>Powered by Tomorrow.io Weather API and OpenAI</footer>
+
+  <!-- Bright Mode Button (Now on Bottom Left) -->
+  <button class="bright-btn" title="Bright Mode">
+    <i class="fa-solid fa-lightbulb"></i>
+  </button>
+
+  <!-- Chat Button (Now on Bottom Right) -->
+  <button class="chat-widget-btn" onclick="toggleChat()">
+    <i class="fa-solid fa-robot"></i>
+  </button>
+
+  <!-- Chat Window -->
+  <div class="chat-window" id="chat-window">
+    <div class="chat-header">
+      <h3>Weather AI Assistant</h3>
+      <button class="close-chat" onclick="toggleChat()">✕</button>
+    </div>
+    <div class="chat-messages" id="chat-messages">
+      <div class="message bot">
+        Hi! I'm your Weather Assistant. Once the weather data loads, I can give you activity and food suggestions!
+      </div>
+    </div>
+    <div class="chat-input-area">
+      <input type="text" id="chat-input" placeholder="Ask about food, gear..." onkeypress="handleKeyPress(event)">
+      <button onclick="sendMessage()"><i class="fa-solid fa-paper-plane"></i></button>
+    </div>
+  </div>
+
+  <script>
+    // ==========================================
+    // 1. CONFIGURATION
+    // ==========================================
+    // 🔴 YOUR API KEY
+    const API_KEY = 'uTSKdjg78n5E0ni9oIEK4wqVKQnItfcE'; 
+
+    let weatherContext = {
+      temp: null,
+      condition: null,
+      wind: null,
+      loaded: false
+    };
+
+    const weatherCodes = {
+      0: "Unknown", 1000: "Clear", 1100: "Mostly Clear", 1101: "Partly Cloudy", 
+      1102: "Mostly Cloudy", 1001: "Cloudy", 2000: "Fog", 2100: "Light Fog", 
+      4000: "Drizzle", 4001: "Rain", 4200: "Light Rain", 4201: "Heavy Rain", 
+      5000: "Snow", 5001: "Flurries", 5100: "Light Snow", 5101: "Heavy Snow", 
+      8000: "Thunderstorm"
+    };
+
+    // ==========================================
+    // 2. WEATHER FETCHING
+    // ==========================================
+    function fetchWeather(lat, long) {
+      if (API_KEY === 'YOUR_KEY' || API_KEY.length < 10) {
+         document.getElementById('condition-display').innerText = "⚠️ Invalid API Key";
+         return;
+      }
+
+      document.getElementById('condition-display').innerText = "Fetching data...";
+      const url = `https://api.tomorrow.io/v4/weather/realtime?location=${lat},${long}&apikey=${API_KEY}`;
+      
+      fetch(url)
+        .then(async response => {
+          if (!response.ok) throw new Error("API Error");
+          return response.json();
+        })
+        .then(data => {
+          updateUI(data.data.values);
+        })
+        .catch(err => {
+          console.error(err);
+          document.getElementById('condition-display').innerText = "Error loading weather";
+          addBotMessage("I couldn't fetch the live weather. Please check your internet connection.");
+        });
+    }
+
+    function updateUI(values) {
+      if(!values) return;
+
+      const temp = Math.round(values.temperature);
+      const code = values.weatherCode;
+      const conditionText = weatherCodes[code] || "Unknown";
+      
+      document.getElementById('temp-display').innerText = `${temp}°`;
+      document.getElementById('condition-display').innerText = conditionText;
+      document.getElementById('humidity-display').innerText = `Humidity: ${values.humidity}%`;
+      document.getElementById('wind-display').innerText = `Wind: ${values.windSpeed} km/h`;
+      document.getElementById('uv-display').innerText = `UV: ${values.uvIndex}`;
+
+
+      weatherContext = {
+        temp: temp,
+        condition: conditionText.toLowerCase(),
+        wind: values.windSpeed,
+        loaded: true
+      };
+
+      // Updated initial message to prompt specific categories
+      addBotMessage(`Current status: ${temp}°C and ${conditionText}. \n\nType "Food", "Clothing", or "Safety" for specific suggestions!`);
+    }
+
+    // ==========================================
+    // 3. AI CHAT LOGIC (RESTRICTED & CATEGORIZED)
+    // ==========================================
+    const chatWindow = document.getElementById('chat-window');
+    const chatMessages = document.getElementById('chat-messages');
+    const chatInput = document.getElementById('chat-input');
+
+    function toggleChat() {
+      chatWindow.classList.toggle('open');
+    }
+
+    function handleKeyPress(e) {
+      if(e.key === 'Enter') sendMessage();
+    }
+
+    function sendMessage() {
+      const text = chatInput.value.trim();
+      if(!text) return;
+
+      addUserMessage(text);
+      chatInput.value = '';
+
+      setTimeout(() => {
+        const response = generateAIResponse(text);
+        addBotMessage(response);
+      }, 600);
+    }
+
+    function addUserMessage(text) {
+      const div = document.createElement('div');
+      div.className = 'message user';
+      div.innerText = text;
+      chatMessages.appendChild(div);
+      chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+
+    function addBotMessage(text) {
+      const div = document.createElement('div');
+      div.className = 'message bot';
+      div.innerText = text;
+      chatMessages.appendChild(div);
+      chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+
+    function generateAIResponse(input) {
+      input = input.toLowerCase();
+
+      // 1. Data Availability Check
+      if (!weatherContext.loaded) {
+        return "I'm still syncing with the weather satellites. Please wait a moment...";
+      }
+
+      // 2. DOMAIN FILTER (Strict restriction)
+      // Allowed keywords related to weather, food, clothing, safety
+      const allowedKeywords = [
+        "food", "eat", "drink", "hungry", "snack", 
+        "wear", "cloth", "outfit", "dress", "gear", "umbrella", 
+        "safe", "precaution", "danger", "careful", 
+        "weather", "temp", "rain", "hot", "cold", "wind", 
+        "hi", "hello", "help"
+      ];
+
+      const isAllowed = allowedKeywords.some(keyword => input.includes(keyword));
+
+      if (!isAllowed) {
+        return "I am strictly a Climate Assistant. I can only suggest Food, Clothing, or Safety precautions based on the current weather.";
+      }
+
+      // 3. Extract Weather Context
+      const temp = weatherContext.temp;
+      const cond = weatherContext.condition;
+      
+      // Determine Climate State
+      let climateState = "mild";
+      if (cond.includes("rain") || cond.includes("drizzle") || cond.includes("thunder")) {
+        climateState = "rainy";
+      } else if (cond.includes("snow") || temp < 5) {
+        climateState = "freezing";
+      } else if (temp < 15) {
+        climateState = "cold";
+      } else if (temp > 30) {
+        climateState = "hot";
+      }
+
+      // 4. Intent Analysis & Suggestions
+
+      // --- INTENT: FOOD ---
+      if (input.includes("eat") || input.includes("food") || input.includes("hungry") || input.includes("drink")) {
+        if (climateState === "rainy") {
+          return "🌧️ Rainy Food Suggestions:\nIt's wet outside! Perfect for hot comfort food. Try spicy Pakoras with Chai, hot soup, or roasted corn (bhutta). Avoid cold drinks.";
+        } else if (climateState === "hot") {
+          return "☀️ Hot Weather Food:\nStay hydrated! I suggest a fresh fruit salad (watermelon/cucumber), cold buttermilk (chaas), or coconut water. Avoid overly spicy or heavy meals.";
+        } else if (climateState === "cold" || climateState === "freezing") {
+          return "❄️ Cold Weather Food:\nKeep warm with Hot Chocolate, spicy curry, stews, or ginger tea. Nuts and dried fruits are also great for energy.";
+        } else {
+          return "⛅ Mild Weather Food:\nGreat weather for a picnic! Sandwiches, wraps, or a light pasta dish would be perfect.";
+        }
+      }
+
+      // --- INTENT: CLOTHING ---
+      if (input.includes("wear") || input.includes("cloth") || input.includes("outfit") || input.includes("gear")) {
+        if (climateState === "rainy") {
+          return "🌧️ Clothing Recommendation:\nEssential: Raincoat or Umbrella. Wear waterproof shoes (boots/crocs). Avoid white clothes as they might get muddy.";
+        } else if (climateState === "hot") {
+          return "☀️ Clothing Recommendation:\nWear loose, light-colored cotton or linen clothes. Don't forget sunglasses and a cap to protect against UV rays.";
+        } else if (climateState === "freezing") {
+          return "❄️ Clothing Recommendation:\nLayer up! Thermal innerwear is a must. Wear a heavy down jacket, woollen gloves, a beanie, and insulated boots.";
+        } else if (climateState === "cold") {
+          return "🧣 Clothing Recommendation:\nA light jacket, hoodie, or sweater should be enough. Scarf is optional but recommended if it's windy.";
+        } else {
+          return "👕 Clothing Recommendation:\nA t-shirt and jeans or casual wear is perfect. Maybe carry a light layer just in case.";
+        }
+      }
+
+      // --- INTENT: SAFETY/PRECAUTIONS ---
+      if (input.includes("safe") || input.includes("precaution") || input.includes("careful") || input.includes("danger")) {
+        if (climateState === "rainy") {
+          return "⚠️ Safety Precautions:\nRoads are slippery—drive slowly. Watch out for open potholes and waterlogging. Avoid standing under trees during lightning.";
+        } else if (climateState === "hot") {
+          return "⚠️ Safety Precautions:\nRisk of heatstroke. Do not stay in direct sunlight for long periods between 12 PM and 4 PM. Keep staying hydrated.";
+        } else if (climateState === "freezing") {
+          return "⚠️ Safety Precautions:\nWatch out for black ice on roads. Frostbite risk is real—keep skin covered. Keep emergency blankets in your car.";
+        } else {
+          return "✅ Safety Status:\nWeather conditions are generally safe. Just apply basic sunscreen if you are out for long.";
+        }
+      }
+
+      // --- DEFAULT / GREETING ---
+      if (input.includes("hello") || input.includes("hi") || input.includes("help")) {
+        return `Hello! Currently, it is ${temp}°C (${cond}).\n\nAsk me:\n1. "What food should I eat?"\n2. "What should I wear?"\n3. "Any safety precautions?"`;
+      }
+      
+      // Fallback if keyword matches "weather" but not a specific intent
+      return `It is ${temp}°C and ${cond}. Please specify if you want suggestions for Food, Clothing, or Safety.`;
+    }
+
+    // ==========================================
+    // 4. INIT & THEMES
+    // ==========================================
+    window.addEventListener('load', () => {
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+          (pos) => fetchWeather(pos.coords.latitude, pos.coords.longitude),
+          () => fetchWeather(28.6139, 77.2090) 
+        );
+      } else {
+        fetchWeather(28.6139, 77.2090);
+      }
+    });
+
+    (function() {
+      const brightBtn = document.querySelector('.bright-btn');
+      if (brightBtn) {
+        const brightIcon = brightBtn.querySelector('i');
+        function applyTheme(theme) {
+          if (theme === 'light') {
+            document.body.classList.add('light-mode');
+            brightBtn.classList.add('active');
+            brightIcon.className = 'fa-solid fa-moon';
+          } else {
+            document.body.classList.remove('light-mode');
+            brightBtn.classList.remove('active');
+            brightIcon.className = 'fa-solid fa-lightbulb';
+          }
+          try { localStorage.setItem('theme', theme); } catch (e) {}
+        }
+        const saved = localStorage.getItem('theme') || 'light';
+        applyTheme(saved);
+        brightBtn.addEventListener('click', () => {
+          applyTheme(document.body.classList.contains('light-mode') ? 'dark' : 'light');
+        });
+      }
+    })();
+
+    (function() {
+      const aiCard = document.querySelector('.ai-card');
+      if (aiCard) {
+        const month = new Date().getMonth(); 
+        let img = 'https://images.unsplash.com/photo-1508553196788-21b8d39e6b4f?auto=format&fit=crop&w=1200&q=80';
+        if (month <= 1 || month === 11) img = 'https://images.unsplash.com/photo-1482192596544-9eb780fc7f66?auto=format&fit=crop&w=1200&q=80';
+        else if (month >= 2 && month <= 4) img = 'https://images.unsplash.com/photo-1434539073892-1f4f99b2d8a6?auto=format&fit=crop&w=1200&q=80';
+        else if (month >= 5 && month <= 7) img = 'https://images.unsplash.com/photo-1501973801540-537f08ccae7b?auto=format&fit=crop&w=1200&q=80';
+        aiCard.style.setProperty('--ai-bg', `url('${img}')`);
+      }
+    })();
+  </script>
+</body>
+</html>
